@@ -8,6 +8,9 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  APP_NAME: Weave-Lunar-Launcher
+  APP_DESCRIPTION: "A Minecraft Weave Mod Loader Launcher for Lunar Client!"
+  ICON_PATH: icons/weave_loader.png
 
 jobs:
   build:
@@ -41,41 +44,52 @@ jobs:
           sudo apt-get install -y libfuse2
           wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
           chmod +x appimagetool-x86_64.AppImage
-          mkdir -p AppDir/usr/bin
-          cp target/release/Weave-Lunar-Launcher AppDir/usr/bin/
+          mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps
+          cp target/release/${{ env.APP_NAME }} AppDir/usr/bin/
+          cp ${{ env.ICON_PATH }} AppDir/usr/share/icons/hicolor/256x256/apps/${{ env.APP_NAME }}.png
+          cat > AppDir/usr/share/applications/${{ env.APP_NAME }}.desktop << EOL
+          [Desktop Entry]
+          Name=${{ env.APP_NAME }}
+          Exec=${{ env.APP_NAME }}
+          Icon=${{ env.APP_NAME }}
+          Type=Application
+          Categories=Utility;
+          Comment=${{ env.APP_DESCRIPTION }}
+          EOL
           cat > AppDir/AppRun << EOL
           #!/bin/sh
-          exec ./usr/bin/Weave-Lunar-Launcher
+          exec ./usr/bin/${{ env.APP_NAME }}
           EOL
           chmod +x AppDir/AppRun
           ./appimagetool-x86_64.AppImage AppDir
-          mv *.AppImage Weave-Lunar-Launcher-linux.AppImage
+          mv *.AppImage ${{ env.APP_NAME }}-linux.AppImage
 
       - name: Rename binary (Windows)
         if: matrix.os == 'windows-latest'
-        run: mv target/release/Weave-Lunar-Launcher.exe Weave-Lunar-Launcher-windows.exe
+        run: mv target/release/${{ env.APP_NAME }}.exe ${{ env.APP_NAME }}-windows.exe
 
       - name: Rename binary (macOS)
         if: matrix.os == 'macOS-latest'
-        run: mv target/release/Weave-Lunar-Launcher Weave-Lunar-Launcher-macos
+        run: mv target/release/${{ env.APP_NAME }} ${{ env.APP_NAME }}-macos
 
       - name: Upload artifact (Linux)
         if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v2
         with:
-          name: Weave-Lunar-Launcher-linux
-          path: Weave-Lunar-Launcher-linux.AppImage
+          name: ${{ env.APP_NAME }}-linux
+          path: ${{ env.APP_NAME }}-linux.AppImage
 
       - name: Upload artifact (Windows)
         if: matrix.os == 'windows-latest'
         uses: actions/upload-artifact@v2
         with:
-          name: Weave-Lunar-Launcher-windows
-          path: Weave-Lunar-Launcher-windows.exe
+          name: ${{ env.APP_NAME }}-windows
+          path: ${{ env.APP_NAME }}-windows.exe
 
       - name: Upload artifact (macOS)
         if: matrix.os == 'macOS-latest'
         uses: actions/upload-artifact@v2
         with:
-          name: Weave-Lunar-Launcher-macos
-          path: Weave-Lunar-Launcher-macos
+          name: ${{ env.APP_NAME }}-macos
+          path: ${{ env.APP_NAME }}-macos
+
