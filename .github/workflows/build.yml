@@ -45,6 +45,7 @@ jobs:
           mkdir -p AppDir/usr/{bin,share/{applications,icons/hicolor/256x256/apps}}
           cp target/release/${{ env.APP_NAME }} AppDir/usr/bin/
           cp ${{ env.ICON_PATH }} AppDir/usr/share/icons/hicolor/256x256/apps/${{ env.APP_NAME }}.png
+          cp ${{ env.ICON_PATH }} AppDir/${{ env.APP_NAME }}.png
           cat > AppDir/${{ env.APP_NAME }}.desktop << EOL
           [Desktop Entry]
           Name=${{ env.APP_NAME }}
