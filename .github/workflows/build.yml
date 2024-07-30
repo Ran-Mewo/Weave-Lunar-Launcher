@@ -1,4 +1,4 @@
-name: Build and Release
+name: Build and Upload Artifacts
 
 on:
   push:
@@ -16,25 +16,9 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macOS-latest]
-        include:
-          - os: ubuntu-latest
-            artifact_name: linux
-            asset_name: app-linux
-          - os: windows-latest
-            artifact_name: windows
-            asset_name: app-windows.exe
-          - os: macOS-latest
-            artifact_name: macos
-            asset_name: app-macos
 
     steps:
       - uses: actions/checkout@v2
-
-      - name: Install dependencies (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: Install Rust
         uses: actions-rs/toolchain@v1
@@ -42,71 +26,56 @@ jobs:
           toolchain: stable
           override: true
 
-      - name: Build
-        run: cargo build --verbose --release
-
-      - name: Rename binary
+      - name: Install dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest'
         run: |
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            mv target/release/Weave-Lunar-Launcher.exe ${{ matrix.asset_name }}
-          else
-            mv target/release/Weave-Lunar-Launcher ${{ matrix.asset_name }}
-          fi
-        shell: bash
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev
 
-      - name: Upload artifacts
+      - name: Build
+        run: cargo build --release
+
+      - name: Create AppImage (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get install -y libfuse2
+          wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+          mkdir -p AppDir/usr/bin
+          cp target/release/Weave-Lunar-Launcher AppDir/usr/bin/
+          cat > AppDir/AppRun << EOL
+          #!/bin/sh
+          exec ./usr/bin/Weave-Lunar-Launcher
+          EOL
+          chmod +x AppDir/AppRun
+          ./appimagetool-x86_64.AppImage AppDir
+          mv *.AppImage Weave-Lunar-Launcher-linux.AppImage
+
+      - name: Rename binary (Windows)
+        if: matrix.os == 'windows-latest'
+        run: mv target/release/Weave-Lunar-Launcher.exe Weave-Lunar-Launcher-windows.exe
+
+      - name: Rename binary (macOS)
+        if: matrix.os == 'macOS-latest'
+        run: mv target/release/Weave-Lunar-Launcher Weave-Lunar-Launcher-macos
+
+      - name: Upload artifact (Linux)
+        if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v2
         with:
-          name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.asset_name }}
+          name: Weave-Lunar-Launcher-linux
+          path: Weave-Lunar-Launcher-linux.AppImage
 
-  release:
-    name: Create Release
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-
-    steps:
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload artifact (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v2
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
+          name: Weave-Lunar-Launcher-windows
+          path: Weave-Lunar-Launcher-windows.exe
 
-      - name: Download artifacts
-        uses: actions/download-artifact@v2
-
-      - name: Upload Release Asset (Linux)
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload artifact (macOS)
+        if: matrix.os == 'macOS-latest'
+        uses: actions/upload-artifact@v2
         with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./linux/app-linux
-          asset_name: app-linux
-          asset_content_type: application/octet-stream
-
-      - name: Upload Release Asset (Windows)
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./windows/app-windows.exe
-          asset_name: app-windows.exe
-          asset_content_type: application/octet-stream
-
-      - name: Upload Release Asset (macOS)
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./macos/app-macos
-          asset_name: app-macos
-          asset_content_type: application/octet-stream
+          name: Weave-Lunar-Launcher-macos
+          path: Weave-Lunar-Launcher-macos
