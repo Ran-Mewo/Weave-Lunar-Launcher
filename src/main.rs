@@ -70,7 +70,7 @@ impl eframe::App for App {
                         ui.label(format!("Home: {:?}", lunar_client.home_path));
 
                         if lunar_client.flatpak {
-                            ui.colored_label(egui::Color32::YELLOW, "⚠ Flatpak detected");
+                            ui.colored_label(egui::Color32::from_rgb(253, 218, 13), "⚠ Flatpak detected");
                             ui.label("Ensure ~/.weave is exposed to the sandbox.");
                         }
 
@@ -111,8 +111,10 @@ impl eframe::App for App {
                     // Downloading status
                     if self.downloading {
                         ui.add_space(5.0);
-                        ui.spinner();
-                        ui.label("Downloading Weave Loader...");
+                        ui.horizontal(|ui| {
+                            ui.label("Downloading Weave Loader...");
+                            ui.spinner();
+                        });
                     }
                 });
 
@@ -130,9 +132,16 @@ impl eframe::App for App {
                     // Load button
                     let button = egui::Button::new("Load Weave")
                         .fill(if self.lunar_weave_ready.0 && self.lunar_weave_ready.1 {
-                            egui::Color32::from_rgb(0, 150, 136)
+                            if ctx.style().visuals.dark_mode {
+                                egui::Color32::from_rgb(0, 150, 136) // Color for dark mode
+                            } else {
+                                egui::Color32::from_rgb(201, 241, 226) // Color for light mode
+                            }
+                            
+                        } else if ctx.style().visuals.dark_mode {
+                            egui::Color32::DARK_GRAY // Color for dark mode
                         } else {
-                            egui::Color32::DARK_GRAY
+                            egui::Color32::LIGHT_GRAY // Color for light mode
                         })
                         .min_size((0.0, 50.0).into());
 
@@ -141,7 +150,7 @@ impl eframe::App for App {
                         if !lunar_client_cloned.weave_installed {
                             let log_messages = self.log_messages.clone();
                             tokio::spawn(async move {
-                                launcher::launch(lunar_client_cloned, log_messages).unwrap();
+                                launcher::launch(lunar_client_cloned, &log_messages).unwrap();
                             });
                         }
                     }
