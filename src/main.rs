@@ -1,9 +1,10 @@
+#![windows_subsystem = "windows"]
 #![warn(clippy::pedantic)]
 #![warn(clippy::implicit_return)]
 #![allow(clippy::needless_return)]
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use dirs::home_dir;
@@ -29,7 +30,7 @@ struct LunarProcess {
 #[derive(Clone)]
 struct App {
     lunar_client: Option<LunarProcess>,
-    weaver_path: String,
+    weave_path: String,
     downloading: bool,
     lunar_weave_ready: (bool, bool), // Tuple indicating if the game is ready, the first one is for Lunar and the second one is for Weave
     log_messages: Arc<Mutex<Vec<String>>>, // Shared log messages
@@ -37,13 +38,13 @@ struct App {
 
 impl App {
     fn new() -> Self {
-        let weaver = get_weave_loader();
-        let weaver_path = weaver.1.to_str().unwrap();
-        let lunar_client = fetch_lunar_client(weaver_path);
+        let weave = get_weave_loader();
+        let weave_path = weave.1.to_str().unwrap();
+        let lunar_client = fetch_lunar_client(weave_path);
 
         return App {
             lunar_client,
-            weaver_path: weaver_path.to_string(),
+            weave_path: weave_path.to_string(),
             downloading: false,
             lunar_weave_ready: (false, false), // Initially not ready
             log_messages: Arc::new(Mutex::new(vec![])), // Initialize log messages
@@ -53,7 +54,7 @@ impl App {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
-        self.lunar_client = fetch_lunar_client(&self.weaver_path);
+        self.lunar_client = fetch_lunar_client(&self.weave_path);
 
         egui::CentralPanel::default().show(ctx, |ui| {
             // Main layout
@@ -67,7 +68,6 @@ impl eframe::App for App {
                     if let Some(lunar_client) = &self.lunar_client {
                         ui.colored_label(egui::Color32::GREEN, "✓ Lunar Client found");
                         ui.label(format!("PID: {}", lunar_client.pid));
-                        ui.label(format!("Home: {:?}", lunar_client.home_path));
 
                         if lunar_client.flatpak {
                             ui.colored_label(egui::Color32::from_rgb(253, 218, 13), "⚠ Flatpak detected");
@@ -87,7 +87,7 @@ impl eframe::App for App {
                     let (weave_exists, weave_loader) = get_weave_loader();
                     if weave_exists {
                         ui.colored_label(egui::Color32::GREEN, "✓ Weave Loader found");
-                        ui.label(format!("Path: {weave_loader:?}"));
+                        ui.label(format!("Path: {:?}", weave_loader.to_str().unwrap_or("Somewhere").replace('\\', "/")));
                         self.downloading = false;
                         self.lunar_weave_ready.1 = true;
                     } else {
@@ -124,10 +124,6 @@ impl eframe::App for App {
                 ui.vertical_centered_justified(|ui| {
                     ui.heading("Actions");
                     ui.add_space(10.0);
-                    
-                    if self.lunar_weave_ready.0 && self.lunar_weave_ready.1 { // Add extra space when ready
-                        ui.add_space(15.0);
-                    }
 
                     // Load button
                     let button = egui::Button::new("Load Weave")
@@ -214,7 +210,7 @@ fn fetch_lunar_client(weave_path: &str) -> Option<LunarProcess> {
         }
 
         let process_exe_str = process.exe().unwrap().to_str().unwrap();
-        if process_exe_str.contains("bin/java") && process_exe_str.contains(".lunarclient") { // Check if the process is Lunar Client
+        if is_java(process.exe().unwrap()) && process_exe_str.contains(".lunarclient") { // Check if the process is a Java executable and also part of Lunar Client
             // Modify launch_args, where `-Dichor.filteredGenesisSentries` is removed and `-javaagent:<weave_path>` is added
             let mut launch_args_modified: Vec<String> = process.cmd()
                 .iter()
@@ -225,8 +221,8 @@ fn fetch_lunar_client(weave_path: &str) -> Option<LunarProcess> {
             launch_args_modified.insert(1, agent);
             launch_args_modified.remove(0); // Remove the first argument which is the process executable
 
-            // Get the home path of Lunar Client, this is done by splitting the process executable's path by ".lunarclient" and taking the first part and adding back the ".lunarclient/"
-            let mut lunar_client_home_path = PathBuf::from(format!("{}{}", process_exe_str.splitn(2, ".lunarclient").collect::<Vec<&str>>()[0], ".lunarclient"));
+            // Get the home path of Lunar Client, this is done by splitting the process executable's path by ".lunarclient" and taking the first part and adding back the ".lunarclient"
+            let mut lunar_client_home_path = PathBuf::from(format!("{}{}", process_exe_str.split_once(".lunarclient").unwrap().0, ".lunarclient"));
             lunar_client_home_path.push("offline"); // Go into the offline directory
             lunar_client_home_path.push("multiver"); // Go into the multiver directory
 
@@ -241,6 +237,20 @@ fn fetch_lunar_client(weave_path: &str) -> Option<LunarProcess> {
         }
     }
     return None;
+}
+
+// Checks if the path is a Java executable
+fn is_java(path: impl AsRef<Path>) -> bool {
+    let mut last_components = path.as_ref().components().rev().take(2);
+
+    let Some(Component::Normal(java_component)) = last_components.next() else { return false; };
+    let Some(Component::Normal(bin_component)) = last_components.next() else { return false; };
+
+    if java_component.to_str().unwrap().starts_with("java") && bin_component == "bin" {
+        return true;
+    }
+
+    return false
 }
 
 // Returns a tuple containing a boolean indicating if the Weave Loader is installed and the path to the expected Weave Loader

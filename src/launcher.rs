@@ -1,8 +1,10 @@
-use std::io::{BufReader, BufRead};
-use std::process::{Command, Stdio, Child};
+use std::io::{BufRead, BufReader};
+use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use sysinfo::{Signal, System};
+
+use sysinfo::System;
+
 use crate::LunarProcess;
 
 pub fn launch(lunar_process: LunarProcess, log_messages: &Arc<Mutex<Vec<String>>>) -> Result<(), Box<dyn std::error::Error>> {
@@ -100,7 +102,7 @@ fn kill_process(pid: u32) -> Result<(), String> {
     let pid = sysinfo::Pid::from(pid as usize);
 
     return if let Some(process) = system.process(pid) {
-        if process.kill_with(Signal::Term).is_some() {
+        if process.kill() {
             Ok(())
         } else {
             Err(format!("Failed to kill process with PID {pid}"))
