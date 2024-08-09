@@ -1,7 +1,7 @@
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
-use std::thread;
+use std::thread::spawn;
 
 use sysinfo::System;
 
@@ -23,6 +23,7 @@ pub fn launch(lunar_process: LunarProcess, log_messages: &Arc<Mutex<Vec<String>>
         .args(&lunar_process.launch_cmd_modified)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
+        .envs(get_gpu_env_vars()) // Set the GPU environment variables to make it use the dedicated GPU on Linux
         .spawn()?;
 
     handle_output(command, log_messages);
@@ -78,14 +79,14 @@ fn handle_output(mut command: Child, log_messages: &Arc<Mutex<Vec<String>>>) {
     let stderr_reader = BufReader::new(stderr);
 
     let log_messages_clone = log_messages.clone();
-    let stdout_thread = thread::spawn(move || {
+    let stdout_thread = spawn(move || {
         for line in stdout_reader.lines().map_while(Result::ok) {
             log_messages_clone.lock().unwrap().push(line);
         }
     });
 
     let log_messages_clone = log_messages.clone();
-    let stderr_thread = thread::spawn(move || {
+    let stderr_thread = spawn(move || {
         for line in stderr_reader.lines().map_while(Result::ok) {
             log_messages_clone.lock().unwrap().push(format!("ERR: {line}"));
         }
@@ -109,5 +110,42 @@ fn kill_process(pid: u32) -> Result<(), String> {
         }
     } else {
         Err(format!("Process with PID {pid} not found"))
+    }
+}
+
+fn get_gpu_env_vars() -> Vec<(String, String)> {
+    // Check if it's Windows or macOS
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    return Vec::new();
+
+    // For other operating systems (assuming Linux)
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        // Check if two GPUs exist
+        let lspci_output = Command::new("lspci")
+            .arg("-nn")
+            .output()
+            .expect("Failed to execute lspci command");
+
+        let output = String::from_utf8_lossy(&lspci_output.stdout);
+        let gpu_count = output.matches("VGA compatible controller").count();
+
+        if gpu_count < 2 {
+            return Vec::new();
+        }
+
+        // Check if the second GPU is NVIDIA or AMD
+        if output.contains("NVIDIA") {
+            return vec![
+                (String::from("__NV_PRIME_RENDER_OFFLOAD"), String::from("1")),
+                (String::from("__GLX_VENDOR_LIBRARY_NAME"), String::from("nvidia")),
+            ]
+        } else if output.contains("Advanced Micro Devices") || output.contains("AMD") {
+            return vec![
+                (String::from("DRI_PRIME"), String::from("1")),
+            ]
+        }
+        
+        return Vec::new()
     }
 }
